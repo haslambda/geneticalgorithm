@@ -86,7 +86,7 @@ func (g Gene) MutateCenter(mutationSize float32) [2]int {
 
 	g.Center = [2]int{
 		Clip(g.Center[0], 0, width),
-		Clip(g.Center[1], 0, width)}
+		Clip(g.Center[1], 0, height)}
 
 	return g.Center
 }
@@ -125,7 +125,7 @@ func (g Gene) MutateColor(mutationSize float32) color.RGBA {
 }
 
 func (g Gene) Mutate() Gene {
-	mutationSize := float32(math.Max(1, math.Round(rand.NormFloat64()*4+15))) / 100
+	mutationSize := float32(math.Max(1, math.Round(rand.NormFloat64()*float64(4)+float64(15)))) / float32(100)
 
 	r := rand.Float64()
 
@@ -151,7 +151,7 @@ func ComputeFitness(genome []Gene) (float32, image.Image) {
 
 	if img, ok := img.(*image.RGBA); ok {
 		compVal, _ := CompareImage(img, out)
-		fitness = 255 / float32(compVal)
+		fitness = float32(255) / float32(compVal)
 	}
 	return fitness, out
 }
@@ -162,7 +162,7 @@ func ComputePopulation(gnm []Gene) Result {
 
 	//genome := gnm
 
-	genome := make([]Gene, len(gnm))
+	genome2 := make([]Gene, len(gnm))
 
 	for i, gn := range gnm {
 		r := gn.Color.R
@@ -173,49 +173,49 @@ func ComputePopulation(gnm []Gene) Result {
 		cy := gn.Center[1]
 		rad := gn.Radius
 
-		genome[i].Color = color.RGBA{r, g, b, 255}
-		genome[i].Center = [2]int{cx, cy}
-		genome[i].Radius = rad
+		genome2[i].Color = color.RGBA{r, g, b, 255}
+		genome2[i].Center = [2]int{cx, cy}
+		genome2[i].Radius = rad
 	}
 
-	if len(genome) < 200 {
-		for _, g := range genome {
+	if len(genome2) < 200 {
+		for _, g := range genome2 {
 			if rand.Float32() < mutationProb {
 				g = g.Mutate()
 			}
 		}
 	} else {
-		mut := RandomSampleGene(genome, int(float32(len(genome))*mutationProb))
+		mut := RandomSampleGene(genome2, int(float32(len(genome2))*mutationProb))
 		for _, g := range mut {
 			g = g.Mutate()
 		}
 	}
 
 	if rand.Float32() < addProb {
-		genome = append(genome, gene)
+		genome2 = append(genome2, gene)
 	}
 
-	if len(genome) > 0 && rand.Float32() < removeProb {
-		genome = RemoveGene(genome, rand.Intn(len(genome)))
+	if len(genome2) > 0 && rand.Float32() < removeProb {
+		genome2 = RemoveGene(genome2, rand.Intn(len(genome2)))
 	}
 
-	fitness, out := ComputeFitness(genome)
+	fitness, out2 := ComputeFitness(genome2)
 
-	result := Result{fitness, genome, out}
+	result := Result{fitness, genome2, out2}
 	return result
 }
 
-func worker(genomes chan []Gene, results chan<- Result) {
+func worker(results chan Result) {
 	defer wg.Done()
 	for i := 0; i < 10; i++ {
-		result := ComputePopulation(<-genomes)
+		result := ComputePopulation(genome)
 		results <- result
-		genomes <- result.genome
 	}
 }
 
 func findBest(results chan Result) {
-	max := (<-results).fitness
+	best = <-results
+	max := best.fitness
 	for i := 0; i < population-1; i++ {
 		result := <-results
 		if result.fitness > max {
@@ -239,7 +239,11 @@ func main() {
 
 	//imgPath := os.Args[1]
 	imgPath := "test.png"
-	imgF, _ := os.Open(imgPath)
+	imgF, img_check := os.Open(imgPath)
+  if img_check != nil {
+    fmt.Println(img_check)
+    return
+  }
 	defer imgF.Close()
 	img, _, _ = image.Decode(imgF)
 	b := img.Bounds()
@@ -261,16 +265,16 @@ func main() {
 
 	for gen < 2000 {
 
-		genomes := make(chan []Gene, population)
+		//genomes := make(chan []Gene, population)
 		results := make(chan Result, population)
 
-		for i := 0; i < population; i++ {
-			genomes <- genome
-		}
+		//for i := 0; i < population; i++ {
+		//	genomes <- genome
+		//}
 
 		for w := 0; w < workers; w++ {
 			wg.Add(1)
-			go worker(genomes, results)
+			go worker(results)
 		}
 
 		wg.Wait()
@@ -285,7 +289,6 @@ func main() {
 		out = best.out
 
 		close(results)
-		close(genomes)
 
 		gen++
 		fmt.Printf("Currently on generation %d, fitness %.6f\n", gen, best.fitness)
